@@ -2,12 +2,15 @@ var mongoose = require('mongoose');
 var Schema = mongoose.Schema;
 
 var service = new Schema({
-	name:  String,
-	address: String,
-	phone:   String,
-	hour: String,
-	website: String,
-	description: String
+		name:  {
+			type: String,
+			required: true
+		},
+		address: String,
+		phone:   String,
+		hour: String,
+		website: String,
+		description: String
 	}
 });
 

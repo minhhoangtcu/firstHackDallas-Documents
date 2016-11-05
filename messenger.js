@@ -178,7 +178,29 @@ const fbPromptLocation = (id) => {
 const sessions = {};
 
 // This will contain all current activities by users
+// fbid -> { activity: add|update
+//           data: data package for the DB}
 const activities = {};
+
+const dataForm = {
+  id: "",
+  name: "",
+  ssn: "",
+  address: "",
+  sex: "",
+  martial_status: "",
+  education_level: ""
+}
+
+const prompts = {
+  name: "What is your name?",
+  ssn: "What is your ssn?",
+  address: "What is your address?",
+  sex: "What is your gender?",
+  martial_status: "Are you married?",
+  education_level: "What is your education level?"
+}
+
 
 const findOrCreateSession = (fbid) => {
   let sessionId;
@@ -195,6 +217,18 @@ const findOrCreateSession = (fbid) => {
     sessions[sessionId] = {fbid: fbid, context: {}};
   }
   return sessionId;
+};
+
+const findOrCreateActivity = (fbid) => {
+
+  let activity;
+
+  if (!activities[fbid]) {
+    activities[fbid] = {activity: "", data: dataForm}
+  }
+  activity = activities[fbid];
+
+  return activity;
 };
 
 // Our bot actions
@@ -303,43 +337,92 @@ app.post('/webhook', (req, res) => {
           } else if (text) {
 
             // We received a text message
-            switch (text) {
+            switch (text.toLowerCase()) {
               case 'show profile':
 
                 break;
               case 'create profile':
+                console.log('> User creating new profile');
+
+                var activity = findOrCreateActivity(sender);
+                activity['activity'] = 'add';
+                activity['data'] = dataForm;
+                activity['data']['id'] = sender;
+
+                fbMessage(sender, 'What is your name?');
 
                 break;
               case 'help':
 
                 break;
+
               default:
-                // Let's forward the message to the Wit.ai Bot Engine
-                // This will run all actions until our bot has nothing left to do
-                wit.runActions(
-                  sessionId, // the user's current session
-                  text, // the user's message
-                  sessions[sessionId].context // the user's current session state
-                ).then((context) => {
-                  // Our bot did everything it has to do.
-                  // Now it's waiting for further messages to proceed.
-                  console.log('Waiting for next user messages');
 
-                  // Based on the session state, you might want to reset the session.
-                  // This depends heavily on the business logic of your bot.
-                  // Example:
-                  // if (context['done']) {
-                  //   delete sessions[sessionId];
-                  // }
+                // Check to see if the user is in a middle of an activity or not. If yes, continue the activity, else, end to bot
+                var activity = findOrCreateActivity(sender);
+                if (activity['activity'] == 'add') {
+                  console.log("> User is adding");
 
-                  // Updating the user's current session state
-                  sessions[sessionId].context = context;
-                })
-                .catch((err) => {
-                  console.error('Oops! Got an error from Wit: ', err.stack);
-                })
+                  let missingVariable = null;
 
-                break;
+                  // Get to first empty and edit value
+
+                  Object.keys(activity['data']).forEach(k => {
+                    if (missingVariable == null && activity['data'][k] == '') {
+                      missingVariable = k;
+                    }
+                  });
+
+                  activity['data'][missingVariable] = text;
+                  console.log(`> Added a field ${missingVariable}: ${text}`);
+
+                  // Prompt next answer
+
+                  let nextMissingVariable = null;
+
+                  Object.keys(activity['data']).forEach(k => {
+                    if (nextMissingVariable == null && activity['data'][k] == '') {
+                      nextMissingVariable = k;
+                    }
+                  });
+
+                  fbMessage(sender, prompts[nextMissingVariable]);
+
+                  if (nextMissingVariable == null) { // cannot find anything next
+                    // append to database
+                    activity['activity'] = '' // clear up, finished
+                    console.log(activity);
+                  }
+
+                } else {
+
+                  // Let's forward the message to the Wit.ai Bot Engine
+                  // This will run all actions until our bot has nothing left to do
+                  wit.runActions(
+                    sessionId, // the user's current session
+                    text, // the user's message
+                    sessions[sessionId].context // the user's current session state
+                    ).then((context) => {
+                    // Our bot did everything it has to do.
+                    // Now it's waiting for further messages to proceed.
+                    console.log('Waiting for next user messages');
+
+                    // Based on the session state, you might want to reset the session.
+                    // This depends heavily on the business logic of your bot.
+                    // Example:
+                    // if (context['done']) {
+                    //   delete sessions[sessionId];
+                    // }
+
+                    // Updating the user's current session state
+                    sessions[sessionId].context = context;
+                  })
+                    .catch((err) => {
+                      console.error('Oops! Got an error from Wit: ', err.stack);
+                    })
+                  }
+
+                break; // for the default
             }
 
             

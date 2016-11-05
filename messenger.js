@@ -45,6 +45,42 @@ if (process.env.IS_DEBUGGING) {
 }
 
 // ----------------------------------------------------------------------------
+// Healper functions
+
+const firstEntityValue = (entities, entity) => {
+    const val = entities && entities[entity] &&
+            Array.isArray(entities[entity]) &&
+            entities[entity].length > 0 &&
+            entities[entity][0].value
+        ;
+    if (!val) {
+        return null;
+    }
+    return typeof val === 'object' ? val.value : val;
+};
+
+// Tell Messenger's to send stuff to user
+const sendUser = (body) => {
+  
+  console.log(body);
+
+  const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
+
+  return fetch('https://graph.facebook.com/me/messages?' + qs, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body,
+  })
+  .then(rsp => rsp.json())
+  .then(json => {
+    if (json.error && json.error.message) {
+      throw new Error(json.error.message);
+    }
+    return json;
+  });
+}
+
+// ----------------------------------------------------------------------------
 // Database code
 
 // Connect to database
@@ -64,20 +100,8 @@ const fbMessage = (id, text) => {
     message: { text },
   });
 
-  const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
+  return sendUser(body);
 
-  return fetch('https://graph.facebook.com/me/messages?' + qs, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body,
-  })
-  .then(rsp => rsp.json())
-  .then(json => {
-    if (json.error && json.error.message) {
-      throw new Error(json.error.message);
-    }
-    return json;
-  });
 };
 
 // Send a prompt for multiple choices to user
@@ -101,22 +125,7 @@ const fbMultipleChoices = (id, text, multipleChoices) => {
     },
   });
 
-  console.log(body);
-
-  const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
-
-  return fetch('https://graph.facebook.com/me/messages?' + qs, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body,
-  })
-  .then(rsp => rsp.json())
-  .then(json => {
-    if (json.error && json.error.message) {
-      throw new Error(json.error.message);
-    }
-    return json;
-  });
+  return sendUser(body);
 }
 
 // Ask for user location
@@ -130,22 +139,7 @@ const fbPromptLocation = (id) => {
     },
   });
 
-  console.log(body);
-
-  const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
-
-  return fetch('https://graph.facebook.com/me/messages?' + qs, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body,
-  })
-  .then(rsp => rsp.json())
-  .then(json => {
-    if (json.error && json.error.message) {
-      throw new Error(json.error.message);
-    }
-    return json;
-  });
+  return sendUser(body);
 }
 
 // ----------------------------------------------------------------------------
@@ -198,9 +192,23 @@ const actions = {
       // Giving the wheel back to our bot
       return Promise.resolve()
     }
+
+
   },
 
   // Execute function on bot side
+  getServicesAroundMe({context, entities}) {
+    return new Promise( (resolve, reject) => {
+
+      var location = firstEntityValue(entities, "location")
+      if (location) {
+        context.services = 'shit head!'
+      }
+
+      return resolve(context);
+
+    });
+  },
 
 
   // You should implement your custom actions here
@@ -273,34 +281,35 @@ app.post('/webhook', (req, res) => {
                 fbPromptLocation(sender);
                 break;
               default:
-                fbMessage(sender, `Echo: ${text}`);
+                // Let's forward the message to the Wit.ai Bot Engine
+                // This will run all actions until our bot has nothing left to do
+                wit.runActions(
+                  sessionId, // the user's current session
+                  text, // the user's message
+                  sessions[sessionId].context // the user's current session state
+                ).then((context) => {
+                  // Our bot did everything it has to do.
+                  // Now it's waiting for further messages to proceed.
+                  console.log('Waiting for next user messages');
+
+                  // Based on the session state, you might want to reset the session.
+                  // This depends heavily on the business logic of your bot.
+                  // Example:
+                  // if (context['done']) {
+                  //   delete sessions[sessionId];
+                  // }
+
+                  // Updating the user's current session state
+                  sessions[sessionId].context = context;
+                })
+                .catch((err) => {
+                  console.error('Oops! Got an error from Wit: ', err.stack);
+                })
+
                 break;
             }
 
-            // Let's forward the message to the Wit.ai Bot Engine
-            // This will run all actions until our bot has nothing left to do
-            wit.runActions(
-              sessionId, // the user's current session
-              text, // the user's message
-              sessions[sessionId].context // the user's current session state
-            ).then((context) => {
-              // Our bot did everything it has to do.
-              // Now it's waiting for further messages to proceed.
-              console.log('Waiting for next user messages');
-
-              // Based on the session state, you might want to reset the session.
-              // This depends heavily on the business logic of your bot.
-              // Example:
-              // if (context['done']) {
-              //   delete sessions[sessionId];
-              // }
-
-              // Updating the user's current session state
-              sessions[sessionId].context = context;
-            })
-            .catch((err) => {
-              console.error('Oops! Got an error from Wit: ', err.stack || err);
-            })
+            
           }
         } else {
           console.log('received event', JSON.stringify(event));

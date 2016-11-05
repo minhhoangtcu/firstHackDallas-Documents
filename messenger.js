@@ -390,7 +390,16 @@ app.post('/webhook', (req, res) => {
                     }
                   });
 
-                  fbMessage(sender, prompts[nextMissingVariable]);
+                  switch (nextMissingVariable) {
+                    case 'sex':
+                      fbMultipleChoices(sender, prompts[nextMissingVariable], ['Male', 'Female']);
+                      break;
+                    case 'martial_status':
+                      fbMultipleChoices(sender, prompts[nextMissingVariable], ['Married', 'Single', 'ByeBye Husby']);
+                      break;
+                    default:
+                      fbMessage(sender, prompts[nextMissingVariable]);  
+                  }
 
                   if (nextMissingVariable == null) { // cannot find anything next
                     // append to database

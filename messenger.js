@@ -116,10 +116,6 @@ const MONGO_URL = process.env.MONGO_URL;
 mongoose.connect(MONGO_URL);
 var db = mongoose.connection;
 
-
-// create route
-var users = require('.routes/users');
-
 // ----------------------------------------------------------------------------
 // Messenger API specific code
 
@@ -357,7 +353,7 @@ app.post('/webhook', (req, res) => {
 
                 break;
               case 'help':
-
+                fbMessage(sender, '1. show profile \t\tshow your profile \n2. create profile \t\tcreate a new profile');
                 break;
 
               default:
@@ -395,7 +391,7 @@ app.post('/webhook', (req, res) => {
                       fbMultipleChoices(sender, prompts[nextMissingVariable], ['Male', 'Female']);
                       break;
                     case 'martial_status':
-                      fbMultipleChoices(sender, prompts[nextMissingVariable], ['Married', 'Single', 'ByeBye Husby']);
+                      fbMultipleChoices(sender, prompts[nextMissingVariable], ['Married', 'Single', 'Dead Husby']);
                       break;
                     default:
                       fbMessage(sender, prompts[nextMissingVariable]);  

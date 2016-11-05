@@ -45,6 +45,69 @@ if (process.env.IS_DEBUGGING) {
 }
 
 // ----------------------------------------------------------------------------
+// Healper functions
+
+const firstEntityValue = (entities, entity) => {
+    const val = entities && entities[entity] &&
+            Array.isArray(entities[entity]) &&
+            entities[entity].length > 0 &&
+            entities[entity][0].value
+        ;
+    if (!val) {
+        return null;
+    }
+    return typeof val === 'object' ? val.value : val;
+};
+
+// Tell Messenger's to send stuff to user
+const sendUser = (body) => {
+  
+  console.log(body);
+
+  const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
+
+  return fetch('https://graph.facebook.com/me/messages?' + qs, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body,
+  })
+  .then(rsp => rsp.json())
+  .then(json => {
+    if (json.error && json.error.message) {
+      throw new Error(json.error.message);
+    }
+    return json;
+  });
+
+}
+
+const getName = (sender) => {
+
+  // https://graph.facebook.com/v2.6/<USER_ID>?fields=first_name,last_name,profile_pic,locale,timezone,gender&access_token=<PAGE_ACCESS_TOKEN>
+  return fetch(`https://graph.facebook.com/v2.6/{$sender}?fields=first_name&access_token={$PAGE_ACCESS_TOKEN}`, {
+    method: 'GET',
+  })
+  .then(rsp => rsp.json())
+  .then(json => {
+    if (json.error && json.error.message) {
+      throw new Error(json.error.message);
+    }
+    return json;
+  });
+
+}
+
+// Get name
+// if (!(sessionId.localeCompare(process.env.FB_BOT_ID) == 0)) { // if sender is not a bot
+//         console.log(sessionId);
+//         getName(sessionId)
+//         .then(json => {
+//           console.log(json);
+//           console.log(`> Recevied text from sender: ${sender} with name text: ${text}`);
+//         });  
+// }
+
+// ----------------------------------------------------------------------------
 // Database code
 
 // Connect to database
@@ -68,20 +131,8 @@ const fbMessage = (id, text) => {
     message: { text },
   });
 
-  const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
+  return sendUser(body);
 
-  return fetch('https://graph.facebook.com/me/messages?' + qs, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body,
-  })
-  .then(rsp => rsp.json())
-  .then(json => {
-    if (json.error && json.error.message) {
-      throw new Error(json.error.message);
-    }
-    return json;
-  });
 };
 
 // Send a prompt for multiple choices to user
@@ -105,22 +156,7 @@ const fbMultipleChoices = (id, text, multipleChoices) => {
     },
   });
 
-  console.log(body);
-
-  const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
-
-  return fetch('https://graph.facebook.com/me/messages?' + qs, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body,
-  })
-  .then(rsp => rsp.json())
-  .then(json => {
-    if (json.error && json.error.message) {
-      throw new Error(json.error.message);
-    }
-    return json;
-  });
+  return sendUser(body);
 }
 
 // Ask for user location
@@ -134,22 +170,7 @@ const fbPromptLocation = (id) => {
     },
   });
 
-  console.log(body);
-
-  const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
-
-  return fetch('https://graph.facebook.com/me/messages?' + qs, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body,
-  })
-  .then(rsp => rsp.json())
-  .then(json => {
-    if (json.error && json.error.message) {
-      throw new Error(json.error.message);
-    }
-    return json;
-  });
+  return sendUser(body);
 }
 
 // ----------------------------------------------------------------------------
@@ -159,6 +180,31 @@ const fbPromptLocation = (id) => {
 // Each session has an entry:
 // sessionId -> {fbid: facebookUserId, context: sessionState}
 const sessions = {};
+
+// This will contain all current activities by users
+// fbid -> { activity: add|update
+//           data: data package for the DB}
+const activities = {};
+
+const dataForm = {
+  id: "",
+  name: "",
+  ssn: "",
+  address: "",
+  sex: "",
+  martial_status: "",
+  education_level: ""
+}
+
+const prompts = {
+  name: "What is your name?",
+  ssn: "What is your ssn?",
+  address: "What is your address?",
+  sex: "What is your gender?",
+  martial_status: "Are you married?",
+  education_level: "What is your education level?"
+}
+
 
 const findOrCreateSession = (fbid) => {
   let sessionId;
@@ -177,11 +223,24 @@ const findOrCreateSession = (fbid) => {
   return sessionId;
 };
 
+const findOrCreateActivity = (fbid) => {
+
+  let activity;
+
+  if (!activities[fbid]) {
+    activities[fbid] = {activity: "", data: dataForm}
+  }
+  activity = activities[fbid];
+
+  return activity;
+};
+
 // Our bot actions
 const actions = {
 
   // Send to bot
   send({sessionId}, {text}) {
+
     // Our bot has something to say!
     // Let's retrieve the Facebook user whose session belongs to
     const recipientId = sessions[sessionId].fbid;
@@ -202,9 +261,23 @@ const actions = {
       // Giving the wheel back to our bot
       return Promise.resolve()
     }
+
+
   },
 
   // Execute function on bot side
+  getServicesAroundMe({context, entities}) {
+    return new Promise( (resolve, reject) => {
+
+      var location = firstEntityValue(entities, "location")
+      if (location) {
+        context.services = 'shit head!'
+      }
+
+      return resolve(context);
+
+    });
+  },
 
 
   // You should implement your custom actions here
@@ -259,7 +332,6 @@ app.post('/webhook', (req, res) => {
 
           // We retrieve the message content
           const {text, attachments} = event.message;
-          console.log(`> Recevied text from sender: ${sender} text: ${text}`);
 
           if (attachments) {
             // We received an attachment
@@ -269,42 +341,95 @@ app.post('/webhook', (req, res) => {
           } else if (text) {
 
             // We received a text message
-            switch (text) {
-              case 'suck':
-                fbMultipleChoices(sender, text, ['foo', 'bar']);
+            switch (text.toLowerCase()) {
+              case 'show profile':
+
                 break;
-              case 'location':
-                fbPromptLocation(sender);
+              case 'create profile':
+                console.log('> User creating new profile');
+
+                var activity = findOrCreateActivity(sender);
+                activity['activity'] = 'add';
+                activity['data'] = dataForm;
+                activity['data']['id'] = sender;
+
+                fbMessage(sender, 'What is your name?');
+
                 break;
+              case 'help':
+
+                break;
+
               default:
-                fbMessage(sender, `Echo: ${text}`);
-                break;
+
+                // Check to see if the user is in a middle of an activity or not. If yes, continue the activity, else, end to bot
+                var activity = findOrCreateActivity(sender);
+                if (activity['activity'] == 'add') {
+                  console.log("> User is adding");
+
+                  let missingVariable = null;
+
+                  // Get to first empty and edit value
+
+                  Object.keys(activity['data']).forEach(k => {
+                    if (missingVariable == null && activity['data'][k] == '') {
+                      missingVariable = k;
+                    }
+                  });
+
+                  activity['data'][missingVariable] = text;
+                  console.log(`> Added a field ${missingVariable}: ${text}`);
+
+                  // Prompt next answer
+
+                  let nextMissingVariable = null;
+
+                  Object.keys(activity['data']).forEach(k => {
+                    if (nextMissingVariable == null && activity['data'][k] == '') {
+                      nextMissingVariable = k;
+                    }
+                  });
+
+                  fbMessage(sender, prompts[nextMissingVariable]);
+
+                  if (nextMissingVariable == null) { // cannot find anything next
+                    // append to database
+                    activity['activity'] = '' // clear up, finished
+                    console.log(activity);
+                  }
+
+                } else {
+
+                  // Let's forward the message to the Wit.ai Bot Engine
+                  // This will run all actions until our bot has nothing left to do
+                  wit.runActions(
+                    sessionId, // the user's current session
+                    text, // the user's message
+                    sessions[sessionId].context // the user's current session state
+                    ).then((context) => {
+                    // Our bot did everything it has to do.
+                    // Now it's waiting for further messages to proceed.
+                    console.log('Waiting for next user messages');
+
+                    // Based on the session state, you might want to reset the session.
+                    // This depends heavily on the business logic of your bot.
+                    // Example:
+                    // if (context['done']) {
+                    //   delete sessions[sessionId];
+                    // }
+
+                    // Updating the user's current session state
+                    sessions[sessionId].context = context;
+                  })
+                    .catch((err) => {
+                      console.error('Oops! Got an error from Wit: ', err.stack);
+                    })
+                  }
+
+                break; // for the default
             }
 
-            // Let's forward the message to the Wit.ai Bot Engine
-            // This will run all actions until our bot has nothing left to do
-            wit.runActions(
-              sessionId, // the user's current session
-              text, // the user's message
-              sessions[sessionId].context // the user's current session state
-            ).then((context) => {
-              // Our bot did everything it has to do.
-              // Now it's waiting for further messages to proceed.
-              console.log('Waiting for next user messages');
-
-              // Based on the session state, you might want to reset the session.
-              // This depends heavily on the business logic of your bot.
-              // Example:
-              // if (context['done']) {
-              //   delete sessions[sessionId];
-              // }
-
-              // Updating the user's current session state
-              sessions[sessionId].context = context;
-            })
-            .catch((err) => {
-              console.error('Oops! Got an error from Wit: ', err.stack || err);
-            })
+            
           }
         } else {
           console.log('received event', JSON.stringify(event));

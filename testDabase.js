@@ -43,22 +43,39 @@ app.post('/updateUser', (req, res) => {
 app.get('/getService', (req, res) => {
     var query = req.headers;
     getService(query).then(function(response) {
-        var result = Promise.all(response.map((service, index, array) => {
-            return calculator.calculateDistance(service.location).then(distance => {
-                service['distance'] = distance;
-                return service;
+        var promises = [];
+        var result = [];
+        response.map((service, index, array) => {
+            console.log('there');
+            promises.push(calculator.calculateDistance(service.location).then(distance => {
+                result.push({service: service, distance: distance});
             }, error => {
-                return error;
-            });
-        }));
-        result.then(data => {
-            console.log(data[0]);
+                
+            }));
         });
-        res.json(result);
-    }, function(error) {
-        res.json(error);
+        
+        Promise.all(promises).then(function() {
+            res.json(result);
+        });
     });
 });
+
+function getDistace(response, result) {
+    var res;
+    new Promise(function (resolve) {
+        response.map((service, index, array) => {
+            calculator.calculateDistance(service.location).then(distance => {
+                service['distance'] = distance;
+                result.push(service);
+            }, error => {
+                
+            });
+        })
+        res = resolve;
+    });
+    // res is guaranteed to be set
+    return res;
+}
 
 app.post('/addService', (req, res) => {
     var data = req.body;

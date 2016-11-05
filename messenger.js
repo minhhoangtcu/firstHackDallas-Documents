@@ -7,6 +7,7 @@ const express = require('express');
 const fetch = require('node-fetch');
 const request = require('request');
 const mongoose = require('mongoose');
+const Clarifai = require('clarifai');
 
 let Wit = null;
 let log = null;
@@ -43,6 +44,15 @@ if (process.env.IS_DEBUGGING) {
     console.log(`/webhook will accept the Verify Token "${FB_VERIFY_TOKEN}"`);
   });  
 }
+
+// ----------------------------------------------------------------------------
+// Clarifai functions
+var clarifaiApp = new Clarifai.App(
+  process.env.CLARIFAI_ID,
+  process.env.CLARIFAI_SECRET
+);
+
+
 
 // ----------------------------------------------------------------------------
 // Healper functions
@@ -115,10 +125,6 @@ const MONGO_URL = process.env.MONGO_URL;
 
 mongoose.connect(MONGO_URL);
 var db = mongoose.connection;
-
-
-// create route
-var users = require('.routes/users');
 
 // ----------------------------------------------------------------------------
 // Messenger API specific code
@@ -334,10 +340,21 @@ app.post('/webhook', (req, res) => {
           const {text, attachments} = event.message;
 
           if (attachments) {
-            // We received an attachment
-            // Let's reply with an automatic message
-            fbMessage(sender, 'Sorry I can only process text messages for now.')
-            .catch(console.error);
+            
+            console.log("> User sent an image");
+            let url = attachments[0]['payload']['url'];
+
+            // send to CLARIFAI
+            clarifaiApp.models.predict(Clarifai.GENERAL_MODEL, url).then(
+              function(response) {
+                let concepts = response['data']['outputs'][0]['data']['concepts'];
+                fbMessage(sender, `Beautiful ${concepts[0]['name']}, ${concepts[1]['name']}, ${concepts[2]['name']}`);
+              },
+              function(err) {
+                console.error(err);
+              }
+            );
+
           } else if (text) {
 
             // We received a text message
@@ -357,7 +374,7 @@ app.post('/webhook', (req, res) => {
 
                 break;
               case 'help':
-
+                fbMessage(sender, '1. show profile \t\tshow your profile \n2. create profile \t\tcreate a new profile');
                 break;
 
               default:
@@ -390,7 +407,16 @@ app.post('/webhook', (req, res) => {
                     }
                   });
 
-                  fbMessage(sender, prompts[nextMissingVariable]);
+                  switch (nextMissingVariable) {
+                    case 'sex':
+                      fbMultipleChoices(sender, prompts[nextMissingVariable], ['Male', 'Female']);
+                      break;
+                    case 'martial_status':
+                      fbMultipleChoices(sender, prompts[nextMissingVariable], ['Married', 'Single', 'Dead Husby']);
+                      break;
+                    default:
+                      fbMessage(sender, prompts[nextMissingVariable]);  
+                  }
 
                   if (nextMissingVariable == null) { // cannot find anything next
                     // append to database

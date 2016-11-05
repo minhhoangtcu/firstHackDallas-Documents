@@ -56,9 +56,6 @@ var db = mongoose.connection
 // ----------------------------------------------------------------------------
 // Messenger API specific code
 
-// See the Send API reference
-// https://developers.facebook.com/docs/messenger-platform/send-api-reference
-
 // Send a message to user
 const fbMessage = (id, text) => {
 
@@ -104,6 +101,8 @@ const fbMultipleChoices = (id, text, multipleChoices) => {
     },
   });
 
+  console.log(body);
+
   const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
 
   return fetch('https://graph.facebook.com/me/messages?' + qs, {
@@ -118,12 +117,36 @@ const fbMultipleChoices = (id, text, multipleChoices) => {
     }
     return json;
   });
-
-  console.log(body);
 }
 
-// Ask for a location
-// const fbPrompt
+// Ask for user location
+const fbPromptLocation = (id) => {
+  
+  const body = JSON.stringify({
+    recipient: { id },
+    message: { 
+      "text": "Please share your current location",
+      "quick_replies": [{"content_type": "location"}]
+    },
+  });
+
+  console.log(body);
+
+  const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
+
+  return fetch('https://graph.facebook.com/me/messages?' + qs, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body,
+  })
+  .then(rsp => rsp.json())
+  .then(json => {
+    if (json.error && json.error.message) {
+      throw new Error(json.error.message);
+    }
+    return json;
+  });
+}
 
 // ----------------------------------------------------------------------------
 // Wit.ai bot specific code
@@ -232,7 +255,7 @@ app.post('/webhook', (req, res) => {
 
           // We retrieve the message content
           const {text, attachments} = event.message;
-          console.log(`> Recevied text from sessionID: ${sessionId} text: ${text}`);
+          console.log(`> Recevied text from sender: ${sender} text: ${text}`);
 
           if (attachments) {
             // We received an attachment
@@ -245,6 +268,9 @@ app.post('/webhook', (req, res) => {
             switch (text) {
               case 'suck':
                 fbMultipleChoices(sender, text, ['foo', 'bar']);
+                break;
+              case 'location':
+                fbPromptLocation(sender);
                 break;
               default:
                 fbMessage(sender, `Echo: ${text}`);

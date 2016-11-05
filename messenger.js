@@ -78,7 +78,34 @@ const sendUser = (body) => {
     }
     return json;
   });
+
 }
+
+const getName = (sender) => {
+
+  // https://graph.facebook.com/v2.6/<USER_ID>?fields=first_name,last_name,profile_pic,locale,timezone,gender&access_token=<PAGE_ACCESS_TOKEN>
+  return fetch(`https://graph.facebook.com/v2.6/{$sender}?fields=first_name&access_token={$PAGE_ACCESS_TOKEN}`, {
+    method: 'GET',
+  })
+  .then(rsp => rsp.json())
+  .then(json => {
+    if (json.error && json.error.message) {
+      throw new Error(json.error.message);
+    }
+    return json;
+  });
+
+}
+
+// Get name
+// if (!(sessionId.localeCompare(process.env.FB_BOT_ID) == 0)) { // if sender is not a bot
+//         console.log(sessionId);
+//         getName(sessionId)
+//         .then(json => {
+//           console.log(json);
+//           console.log(`> Recevied text from sender: ${sender} with name text: ${text}`);
+//         });  
+// }
 
 // ----------------------------------------------------------------------------
 // Database code
@@ -150,6 +177,9 @@ const fbPromptLocation = (id) => {
 // sessionId -> {fbid: facebookUserId, context: sessionState}
 const sessions = {};
 
+// This will contain all current activities by users
+const activities = {};
+
 const findOrCreateSession = (fbid) => {
   let sessionId;
   // Let's see if we already have a session for the user fbid
@@ -172,6 +202,7 @@ const actions = {
 
   // Send to bot
   send({sessionId}, {text}) {
+
     // Our bot has something to say!
     // Let's retrieve the Facebook user whose session belongs to
     const recipientId = sessions[sessionId].fbid;
@@ -263,7 +294,6 @@ app.post('/webhook', (req, res) => {
 
           // We retrieve the message content
           const {text, attachments} = event.message;
-          console.log(`> Recevied text from sender: ${sender} text: ${text}`);
 
           if (attachments) {
             // We received an attachment
@@ -274,11 +304,14 @@ app.post('/webhook', (req, res) => {
 
             // We received a text message
             switch (text) {
-              case 'suck':
-                fbMultipleChoices(sender, text, ['foo', 'bar']);
+              case 'show profile':
+
                 break;
-              case 'location':
-                fbPromptLocation(sender);
+              case 'create profile':
+
+                break;
+              case 'help':
+
                 break;
               default:
                 // Let's forward the message to the Wit.ai Bot Engine

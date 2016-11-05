@@ -114,7 +114,11 @@ const getName = (sender) => {
 const MONGO_URL = process.env.MONGO_URL;
 
 mongoose.connect(MONGO_URL);
-var db = mongoose.connection
+var db = mongoose.connection;
+
+
+// create route
+var users = require('.routes/users');
 
 // ----------------------------------------------------------------------------
 // Messenger API specific code

@@ -32,11 +32,20 @@ const FB_APP_SECRET = process.env.FB_APP_SECRET;
 if (!FB_APP_SECRET) { throw new Error('missing FB_APP_SECRET') }
 
 let FB_VERIFY_TOKEN = null;
-crypto.randomBytes(8, (err, buff) => {
-  if (err) throw err;
-  FB_VERIFY_TOKEN = buff.toString('hex');
-  console.log(`/webhook will accept the Verify Token "${FB_VERIFY_TOKEN}"`);
-});
+
+if (process.env.IS_DEBUGGING) {
+  FB_VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN;
+  console.log(`/webhook initialized in debugging mode, and will accept the Verify Token "${FB_VERIFY_TOKEN}"`);
+} else {
+    crypto.randomBytes(8, (err, buff) => {
+    if (err) throw err;
+    FB_VERIFY_TOKEN = buff.toString('hex');
+    console.log(`/webhook will accept the Verify Token "${FB_VERIFY_TOKEN}"`);
+  });  
+}
+
+// ----------------------------------------------------------------------------
+// Database code
 
 // Connect to database
 const MONGO_URL = process.env.MONGO_URL;
@@ -51,15 +60,16 @@ var users = require('.routes/users');
 // ----------------------------------------------------------------------------
 // Messenger API specific code
 
-// See the Send API reference
-// https://developers.facebook.com/docs/messenger-platform/send-api-reference
-
+// Send a message to user
 const fbMessage = (id, text) => {
+
   const body = JSON.stringify({
     recipient: { id },
     message: { text },
   });
+
   const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
+
   return fetch('https://graph.facebook.com/me/messages?' + qs, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -73,6 +83,74 @@ const fbMessage = (id, text) => {
     return json;
   });
 };
+
+// Send a prompt for multiple choices to user
+const fbMultipleChoices = (id, text, multipleChoices) => {
+
+  var quickReplies = [];
+
+  for (var choice of multipleChoices) {
+    quickReplies.push({
+      "content_type": "text",
+      "title": choice,
+      "payload": ""
+    });
+  }
+
+  const body = JSON.stringify({
+    recipient: { id },
+    message: { 
+      text,
+      "quick_replies": quickReplies
+    },
+  });
+
+  console.log(body);
+
+  const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
+
+  return fetch('https://graph.facebook.com/me/messages?' + qs, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body,
+  })
+  .then(rsp => rsp.json())
+  .then(json => {
+    if (json.error && json.error.message) {
+      throw new Error(json.error.message);
+    }
+    return json;
+  });
+}
+
+// Ask for user location
+const fbPromptLocation = (id) => {
+  
+  const body = JSON.stringify({
+    recipient: { id },
+    message: { 
+      "text": "Please share your current location",
+      "quick_replies": [{"content_type": "location"}]
+    },
+  });
+
+  console.log(body);
+
+  const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
+
+  return fetch('https://graph.facebook.com/me/messages?' + qs, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body,
+  })
+  .then(rsp => rsp.json())
+  .then(json => {
+    if (json.error && json.error.message) {
+      throw new Error(json.error.message);
+    }
+    return json;
+  });
+}
 
 // ----------------------------------------------------------------------------
 // Wit.ai bot specific code
@@ -101,6 +179,8 @@ const findOrCreateSession = (fbid) => {
 
 // Our bot actions
 const actions = {
+
+  // Send to bot
   send({sessionId}, {text}) {
     // Our bot has something to say!
     // Let's retrieve the Facebook user whose session belongs to
@@ -123,6 +203,10 @@ const actions = {
       return Promise.resolve()
     }
   },
+
+  // Execute function on bot side
+
+
   // You should implement your custom actions here
   // See https://wit.ai/docs/quickstart
 };
@@ -175,7 +259,7 @@ app.post('/webhook', (req, res) => {
 
           // We retrieve the message content
           const {text, attachments} = event.message;
-          console.log("Recevied text from sessionID: " , sessionId, " text: ", text);
+          console.log(`> Recevied text from sender: ${sender} text: ${text}`);
 
           if (attachments) {
             // We received an attachment
@@ -183,7 +267,19 @@ app.post('/webhook', (req, res) => {
             fbMessage(sender, 'Sorry I can only process text messages for now.')
             .catch(console.error);
           } else if (text) {
+
             // We received a text message
+            switch (text) {
+              case 'suck':
+                fbMultipleChoices(sender, text, ['foo', 'bar']);
+                break;
+              case 'location':
+                fbPromptLocation(sender);
+                break;
+              default:
+                fbMessage(sender, `Echo: ${text}`);
+                break;
+            }
 
             // Let's forward the message to the Wit.ai Bot Engine
             // This will run all actions until our bot has nothing left to do

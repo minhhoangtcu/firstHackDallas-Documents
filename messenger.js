@@ -9,6 +9,8 @@ const request = require('request');
 const mongoose = require('mongoose');
 const Clarifai = require('clarifai');
 const replies = require('./replies.json')['photoCompliment'];
+const database = require('./database');
+const dataServices = require('./data.json');
 
 let Wit = null;
 let log = null;
@@ -276,9 +278,25 @@ const actions = {
   getServicesAroundMe({context, entities}) {
     return new Promise( (resolve, reject) => {
 
+      dataServices
+
+      var allServices = "";
+
+      for (var service of dataServices) {
+
+        if (service['service']) {
+          let house = service['service'];
+          Object.keys(house).forEach(k => {
+            allServices += k + ": " + house[k] + "\n";
+          });
+        }
+      }
+
+      console.log(allServices);
+
       var location = firstEntityValue(entities, "location")
       if (location) {
-        context.services = 'shit head!'
+        context.services = "\n\n" + allServices
       }
 
       return resolve(context);
@@ -372,6 +390,41 @@ app.post('/webhook', (req, res) => {
             switch (text.toLowerCase()) {
               case 'show profile':
 
+
+
+
+                // database.getService({}).then(function(response) {
+
+                //     var allServices = "";
+                //     let json = response;
+
+                //     for (var service of json) {
+
+                //       if (service['service']) {
+                //         let house = service['service'];
+                //         Object.keys(house).forEach(k => {
+                //           console.log(house[k]);
+                //         });
+                //       }
+
+                //       // Object.keys(service).forEach(k => {
+                //       //   Object.keys(service[k]).forEach(h => {
+                //       //     allServices += (h + '\n');
+                //       //   });
+                //       //   // allServices += (k + '\n'); //  + ": " + service[k] + "\n"
+                //       // });
+                //     }
+
+                //     console.log(allServices);
+
+                //     // fbMessage(sender, );
+                // }, function(error) {
+
+                // });
+
+
+                
+
                 break;
               case 'create profile':
                 console.log('> User creating new profile');
@@ -430,7 +483,12 @@ app.post('/webhook', (req, res) => {
                   }
 
                   if (nextMissingVariable == null) { // cannot find anything next
-                    // append to database
+
+                    database.addUser(activity['data'])
+                    .then((data) => {
+                      console.log(`Successfully pushed ${activity['data']['id']} into database`);
+                    });
+
                     activity['activity'] = '' // clear up, finished
                     console.log(activity);
                   }

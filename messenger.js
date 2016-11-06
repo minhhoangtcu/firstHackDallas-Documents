@@ -8,6 +8,7 @@ const fetch = require('node-fetch');
 const request = require('request');
 const mongoose = require('mongoose');
 const Clarifai = require('clarifai');
+const replies = require('./replies.json')['photoCompliment'];
 
 let Wit = null;
 let log = null;
@@ -348,7 +349,17 @@ app.post('/webhook', (req, res) => {
             clarifaiApp.models.predict(Clarifai.GENERAL_MODEL, url).then(
               function(response) {
                 let concepts = response['data']['outputs'][0]['data']['concepts'];
-                fbMessage(sender, `Beautiful ${concepts[0]['name']}, ${concepts[1]['name']}, ${concepts[2]['name']}`);
+                let o1 = concepts[0]['name'];
+                let o2 = concepts[1]['name'];
+                let o3 = concepts[2]['name'];
+
+                let random = Math.floor((Math.random() * replies.length));
+                let reply = replies[random];
+                reply = reply.replace("${o1}", o1);
+                reply = reply.replace("${o2}", o2);
+                reply = reply.replace("${o3}", o3);
+
+                fbMessage(sender, reply);
               },
               function(err) {
                 console.error(err);

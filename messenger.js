@@ -27,7 +27,7 @@ try {
 const PORT = process.env.PORT;
 
 // Wit.ai parameters
-const WIT_TOKEN = process.env.WIT_TOKEN;
+const WIT_TOKEN = process.env.WIT_SERVER_TOKEN;
 
 // Messenger API parameters
 const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
